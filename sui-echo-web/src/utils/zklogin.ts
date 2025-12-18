@@ -1,7 +1,7 @@
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { generateRandomness, getExtendedEphemeralPublicKey, generateNonce } from "@mysten/zklogin";
 
-export const GOOGLE_CLIENT_ID = "YOUR_GOOGLE_CLIENT_ID"; // Placeholder
+export const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID;
 export const REDIRECT_URI = typeof window !== "undefined"
     ? `${window.location.origin}/callback`
     : "http://localhost:3000/callback";
@@ -21,6 +21,10 @@ export const prepareZkLogin = async () => {
         window.sessionStorage.setItem("sui_zklogin_randomness", randomness);
         // Also save for future reference
         window.sessionStorage.setItem("sui_zklogin_nonce", nonce);
+    }
+
+    if (!GOOGLE_CLIENT_ID) {
+        throw new Error("NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID is not defined");
     }
 
     // 4. Construct the OIDC URL
