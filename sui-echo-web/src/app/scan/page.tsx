@@ -9,8 +9,8 @@ import { Volume2, Upload, FileText, ArrowRight, X, Loader2, CheckCircle2 } from 
 import Link from "next/link";
 
 // Package ID should be updated after deployment
-const PACKAGE_ID = "0x...";
-const TEE_WORKER_URL = "http://localhost:3001";
+const PACKAGE_ID = process.env.NEXT_PUBLIC_PACKAGE_ID;
+const TEE_WORKER_URL = process.env.NEXT_PUBLIC_TEE_WORKER_URL;
 
 export default function ScanPage() {
     const account = useCurrentAccount();
