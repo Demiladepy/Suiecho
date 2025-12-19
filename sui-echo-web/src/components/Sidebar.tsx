@@ -22,15 +22,12 @@ export default function Sidebar() {
 
     useEffect(() => {
         async function initSidebar() {
-            // Get zkLogin address
             const address = getZkLoginAddress();
             setZkAddress(address);
 
-            // Get user role from session
             const role = window.sessionStorage.getItem("sui_echo_user_role") as UserRole;
             setUserRole(role);
 
-            // Get email from JWT
             const token = window.sessionStorage.getItem("sui_zklogin_jwt");
             if (token) {
                 try {
@@ -41,7 +38,6 @@ export default function Sidebar() {
                 }
             }
 
-            // Check on-chain if user has CourseRepCap
             if (address && PACKAGE_ID) {
                 try {
                     const client = getSuiClient();
@@ -52,7 +48,6 @@ export default function Sidebar() {
                     });
 
                     if (objects.data.length > 0) {
-                        console.log("[Sidebar] User is a verified course rep!");
                         setIsVerifiedRep(true);
                     }
                 } catch (error) {
@@ -62,7 +57,6 @@ export default function Sidebar() {
 
             setLoading(false);
 
-            // Redirect if not logged in
             if (!isZkLoginSessionValid()) {
                 router.push("/");
             }
@@ -70,7 +64,6 @@ export default function Sidebar() {
 
         initSidebar();
     }, [router]);
-
 
     const handleLogout = () => {
         clearZkLoginSession();
@@ -86,14 +79,12 @@ export default function Sidebar() {
         }
     };
 
-    // Navigation items based on role
     const repNavItems = [
         { name: "Dashboard", href: "/dashboard", icon: Activity },
         { name: "Broadcasts", href: "/dashboard/broadcasts", icon: Radio },
         { name: "Handouts", href: "/dashboard/handouts", icon: ShieldCheck },
         { name: "Admin Panel", href: "/dashboard/admin", icon: ShieldCheck },
     ];
-
 
     const studentNavItems = [
         { name: "Dashboard", href: "/dashboard", icon: Activity },
@@ -104,97 +95,100 @@ export default function Sidebar() {
     const navItems = userRole === 'rep' ? repNavItems : studentNavItems;
 
     return (
-        <aside className="fixed left-0 top-0 h-screen w-64 hidden lg:flex flex-col bg-[#0A0F1D] border-r border-white/5 p-6 z-50">
-            <div className="flex items-center gap-3 px-2 mb-10">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-cyan-400 flex items-center justify-center shadow-lg shadow-blue-500/20">
-                    <Activity className="text-white w-6 h-6" />
+        <aside className="fixed left-0 top-0 h-screen w-64 hidden lg:flex flex-col bg-[#0B0E14] border-r border-[#1E232E] p-5 z-50">
+            {/* Logo */}
+            <div className="flex items-center gap-3 px-1 mb-8">
+                <div className="w-9 h-9 rounded-lg bg-[#4F9EF8] flex items-center justify-center">
+                    <Activity className="text-white w-5 h-5" />
                 </div>
                 <div>
-                    <h3 className="font-bold text-white tracking-tight">Sui-Echo</h3>
+                    <h3 className="font-semibold text-white text-sm">Sui-Echo</h3>
                     {userRole === 'rep' ? (
                         isVerifiedRep ? (
-                            <div className="flex items-center gap-1 text-[10px] text-green-400 font-bold uppercase tracking-wider">
-                                <ShieldCheck size={8} /> Verified Rep
+                            <div className="flex items-center gap-1 text-[10px] text-[#22C55E] font-medium">
+                                <ShieldCheck size={10} /> Verified Rep
                             </div>
                         ) : (
-                            <div className="flex items-center gap-1 text-[10px] text-yellow-500 font-medium">
-                                <AlertCircle size={8} /> Pending Verification
+                            <div className="flex items-center gap-1 text-[10px] text-[#EAB308] font-medium">
+                                <AlertCircle size={10} /> Pending
                             </div>
                         )
                     ) : (
-                        <div className="flex items-center gap-1 text-[10px] text-blue-400 font-medium">
+                        <div className="text-[10px] text-[#8A919E] font-medium">
                             Student / Reader
                         </div>
                     )}
                 </div>
             </div>
 
-            <nav className="flex-1 space-y-2">
+            {/* Navigation */}
+            <nav className="flex-1 space-y-1">
                 {navItems.map((item) => {
                     const isActive = pathname === item.href;
                     return (
                         <Link
                             key={item.name}
                             href={item.href}
-                            className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${isActive
-                                ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20"
-                                : "text-gray-400 hover:text-white hover:bg-white/5"
+                            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-sm font-medium ${isActive
+                                    ? "bg-[#4F9EF8] text-white"
+                                    : "text-[#8A919E] hover:text-white hover:bg-[#12151C]"
                                 }`}
                         >
-                            <item.icon size={20} className={isActive ? "text-white" : "text-gray-400 group-hover:text-blue-400"} />
-                            <span className="font-semibold text-sm">{item.name}</span>
+                            <item.icon size={18} />
+                            <span>{item.name}</span>
                         </Link>
                     );
                 })}
             </nav>
 
-            {/* Course Rep Apply Banner - only for reps who aren't verified */}
+            {/* Apply Banner for unverified reps */}
             {userRole === 'rep' && !isVerifiedRep && (
-                <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl">
-                    <p className="text-xs text-blue-400 font-bold mb-2">Become a Verified Rep</p>
-                    <p className="text-[10px] text-blue-400/70 mb-3">Apply to unlock broadcasting and verification features.</p>
+                <div className="mb-4 p-3 bg-[#4F9EF8]/10 border border-[#4F9EF8]/20 rounded-lg">
+                    <p className="text-xs text-[#4F9EF8] font-semibold mb-2">Become a Verified Rep</p>
+                    <p className="text-[10px] text-[#8A919E] mb-3">Apply to unlock broadcasting features.</p>
                     <Link
                         href="/dashboard/apply"
-                        className="block w-full py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg text-center transition-colors"
+                        className="block w-full py-2 bg-[#4F9EF8] text-white text-xs font-semibold rounded-md text-center hover:opacity-90 transition-opacity"
                     >
                         Apply Now
                     </Link>
                 </div>
             )}
 
-            <div className="mt-auto pt-6 border-t border-white/5">
-                <div className="flex items-center gap-3 px-2 mb-4">
-                    <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-blue-400 border border-white/10">
-                        <User size={20} />
+            {/* User section */}
+            <div className="pt-4 border-t border-[#1E232E]">
+                <div className="flex items-center gap-3 px-1 mb-3">
+                    <div className="w-9 h-9 rounded-full bg-[#12151C] flex items-center justify-center text-[#4F9EF8] border border-[#1E232E]">
+                        <User size={18} />
                     </div>
                     <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold text-white truncate">{userEmail || "Anonymous"}</p>
-                        <p className="text-[10px] text-gray-500 font-medium">zkLogin User</p>
+                        <p className="text-xs font-medium text-white truncate">{userEmail || "Anonymous"}</p>
+                        <p className="text-[10px] text-[#565B67]">zkLogin</p>
                     </div>
                 </div>
 
-                {/* Address with copy */}
+                {/* Address copy */}
                 {zkAddress && (
                     <button
                         onClick={handleCopyAddress}
-                        className="w-full mb-4 px-3 py-2 bg-white/5 border border-white/10 rounded-lg flex items-center justify-between hover:bg-white/10 transition-colors"
+                        className="w-full mb-3 px-3 py-2 bg-[#12151C] border border-[#1E232E] rounded-lg flex items-center justify-between hover:border-[#2A3140] transition-colors"
                     >
-                        <span className="text-[10px] text-gray-400 font-mono truncate">
+                        <span className="text-[10px] text-[#8A919E] font-mono truncate">
                             {zkAddress.slice(0, 8)}...{zkAddress.slice(-6)}
                         </span>
                         {copied ? (
-                            <Check size={12} className="text-green-400" />
+                            <Check size={12} className="text-[#22C55E]" />
                         ) : (
-                            <Copy size={12} className="text-gray-500" />
+                            <Copy size={12} className="text-[#565B67]" />
                         )}
                     </button>
                 )}
 
                 <button
                     onClick={handleLogout}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-3 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-xl transition-all font-bold text-xs uppercase tracking-widest"
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2.5 text-[#EF4444] hover:bg-[#EF4444]/10 rounded-lg transition-colors font-medium text-xs"
                 >
-                    <LogOut size={16} /> Logout
+                    <LogOut size={14} /> Logout
                 </button>
             </div>
         </aside>
