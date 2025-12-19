@@ -1,16 +1,28 @@
-// lib/walrus.ts
+/**
+ * Walrus Storage Utilities
+ * For uploading and retrieving content from Walrus
+ */
 
-export const WALRUS_AGGREGATOR = "https://aggregator.walrus-testnet.walrus.space";
-export const WALRUS_PUBLISHER = "https://publisher.walrus-testnet.walrus.space";
+import { WALRUS_AGGREGATOR, WALRUS_PUBLISHER } from "@/config";
 
-export type WalrusBlob = {
-  blobId: string;
-  endEpoch: number;
-  suiRefType: "CertifiedEffects";
+export type WalrusUploadResponse = {
+  newlyCreated?: {
+    blobObject: {
+      blobId: string;
+      storedEpoch: number;
+      endEpoch: number;
+    };
+  };
+  alreadyCertified?: {
+    blobId: string;
+    endEpoch: number;
+  };
 };
 
 /**
  * Uploads a file (Blob/Buffer) to Walrus
+ * @param file - The file or blob to upload
+ * @returns The blob ID for retrieval
  */
 export async function uploadToWalrus(file: Blob | File): Promise<string> {
   const response = await fetch(`${WALRUS_PUBLISHER}/v1/store`, {
@@ -19,28 +31,48 @@ export async function uploadToWalrus(file: Blob | File): Promise<string> {
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to upload to Walrus: ${response.statusText}`);
+    const errorText = await response.text();
+    throw new Error(`Failed to upload to Walrus: ${response.status} - ${errorText}`);
   }
 
-  const data = await response.json();
-  
-  // Depending on the exact Walrus API response format (it varies slightly in testnet updates)
-  // Usually returns { newlyCreated: { blobObject: { blobId: "..." } } } or similar
-  // For this implementation we'll assume a standard response structure or handle the known one.
-  
-  // Checking typical response:
+  const data: WalrusUploadResponse = await response.json();
+
+  // Handle different response formats
   if (data.newlyCreated?.blobObject?.blobId) {
     return data.newlyCreated.blobObject.blobId;
-  } else if (data.alreadyCertified?.blobId) {
+  }
+  if (data.alreadyCertified?.blobId) {
     return data.alreadyCertified.blobId;
   }
-  
+
+  console.error("[Walrus] Unexpected response:", data);
   throw new Error("Invalid response from Walrus Publisher");
 }
 
 /**
- * Reads a blob from Walrus
+ * Constructs the URL to read a blob from Walrus
+ * @param blobId - The blob ID to retrieve
+ * @returns The full URL to fetch the blob
  */
 export function getWalrusUrl(blobId: string): string {
   return `${WALRUS_AGGREGATOR}/v1/${blobId}`;
 }
+
+/**
+ * Fetches content from Walrus
+ * @param blobId - The blob ID to fetch
+ * @returns The blob content as text
+ */
+export async function fetchFromWalrus(blobId: string): Promise<string> {
+  const url = getWalrusUrl(blobId);
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch from Walrus: ${response.status}`);
+  }
+
+  return await response.text();
+}
+
+// Re-export config for convenience
+export { WALRUS_AGGREGATOR, WALRUS_PUBLISHER };
