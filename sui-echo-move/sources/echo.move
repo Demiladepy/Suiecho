@@ -8,9 +8,6 @@
 /// - Course rep registration and verification
 
 module sui_echo::echo {
-    use sui::object::{Self, UID};
-    use sui::transfer;
-    use sui::tx_context::{Self, TxContext};
     use std::string::{Self, String};
     use sui::coin::{Self, Coin};
     use sui::sui::SUI;
@@ -176,7 +173,7 @@ module sui_echo::echo {
 
     // ========== Admin Functions ==========
 
-    public entry fun create_tee_verifier(
+    public fun create_tee_verifier(
         _admin: &AdminCap,
         name: vector<u8>,
         recipient: address,
@@ -188,7 +185,7 @@ module sui_echo::echo {
         }, recipient);
     }
 
-    public entry fun set_reward_amount(
+    public fun set_reward_amount(
         _admin: &AdminCap,
         ajo: &mut AlumniAjo,
         new_amount: u64,
@@ -199,7 +196,7 @@ module sui_echo::echo {
 
     // ========== Course Rep Registration ==========
 
-    public entry fun apply_for_course_rep(
+    public fun apply_for_course_rep(
         registry: &mut CourseRepRegistry,
         course_code: vector<u8>,
         full_name: vector<u8>,
@@ -240,7 +237,7 @@ module sui_echo::echo {
         transfer::transfer(application, sender);
     }
 
-    public entry fun approve_course_rep(
+    public fun approve_course_rep(
         _admin: &AdminCap,
         registry: &mut CourseRepRegistry,
         application: CourseRepApplication,
@@ -279,7 +276,7 @@ module sui_echo::echo {
         object::delete(id);
     }
 
-    public entry fun reject_course_rep(
+    public fun reject_course_rep(
         _admin: &AdminCap,
         registry: &mut CourseRepRegistry,
         application: CourseRepApplication,
@@ -308,7 +305,7 @@ module sui_echo::echo {
 
     // ========== Handout Functions ==========
 
-    public entry fun mint_handout(
+    public fun mint_handout(
         blob_id: vector<u8>,
         description: vector<u8>,
         ctx: &mut TxContext
@@ -335,7 +332,7 @@ module sui_echo::echo {
         transfer::transfer(handout, sender);
     }
 
-    public entry fun verify_handout_tee(
+    public fun verify_handout_tee(
         _verifier: &TeeVerifierCap,
         handout: &mut Handout,
         ajo: &mut AlumniAjo,
@@ -353,7 +350,7 @@ module sui_echo::echo {
         });
     }
 
-    public entry fun verify_handout_admin(
+    public fun verify_handout_admin(
         _admin: &AdminCap,
         handout: &mut Handout,
         ajo: &mut AlumniAjo,
@@ -371,7 +368,7 @@ module sui_echo::echo {
         });
     }
 
-    public entry fun verify_handout_rep(
+    public fun verify_handout_rep(
         rep: &CourseRepCap,
         handout: &mut Handout,
         ajo: &mut AlumniAjo,
@@ -389,7 +386,7 @@ module sui_echo::echo {
         });
     }
 
-    public entry fun verify_handout(handout: &mut Handout, ctx: &mut TxContext) {
+    public fun verify_handout(handout: &mut Handout, ctx: &mut TxContext) {
         assert!(handout.uploader == tx_context::sender(ctx), ENotAuthorized);
         assert!(!handout.verified, EAlreadyVerified);
         handout.verified = true;
@@ -404,7 +401,7 @@ module sui_echo::echo {
 
     // ========== Reward Functions ==========
 
-    public entry fun claim_reward(
+    public fun claim_reward(
         ajo: &mut AlumniAjo,
         handout: &Handout,
         course_code: vector<u8>,
@@ -434,7 +431,7 @@ module sui_echo::echo {
 
     // ========== Broadcast Functions ==========
 
-    public entry fun broadcast_verified(
+    public fun broadcast_verified(
         rep: &CourseRepCap,
         audio_blob_id: vector<u8>,
         message: vector<u8>,
@@ -456,7 +453,7 @@ module sui_echo::echo {
         transfer::transfer(broadcast_obj, rep.rep_address);
     }
 
-    public entry fun broadcast(
+    public fun broadcast(
         course_code: vector<u8>,
         audio_blob_id: vector<u8>,
         message: vector<u8>,
@@ -482,7 +479,7 @@ module sui_echo::echo {
 
     // ========== Sponsorship Functions ==========
 
-    public entry fun sponsor_course(
+    public fun sponsor_course(
         ajo: &mut AlumniAjo,
         course_code: vector<u8>,
         payment: Coin<SUI>,
