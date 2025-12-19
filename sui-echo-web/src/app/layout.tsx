@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Sui-Echo",
+  title: "Suiecho",
   description: "Decentralized Reader for the Visually Impaired",
 };
 

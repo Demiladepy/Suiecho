@@ -98,11 +98,11 @@ export default function Sidebar() {
         <aside className="fixed left-0 top-0 h-screen w-64 hidden lg:flex flex-col bg-[#0B0E14] border-r border-[#1E232E] p-5 z-50">
             {/* Logo */}
             <div className="flex items-center gap-3 px-1 mb-8">
-                <div className="w-9 h-9 rounded-lg bg-[#4F9EF8] flex items-center justify-center">
-                    <Activity className="text-white w-5 h-5" />
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center overflow-hidden">
+                    <img src="/suiecho-logo.svg" alt="Suiecho Logo" className="w-full h-full object-contain" />
                 </div>
                 <div>
-                    <h3 className="font-semibold text-white text-sm">Sui-Echo</h3>
+                    <h3 className="font-semibold text-white text-sm">Suiecho</h3>
                     {userRole === 'rep' ? (
                         isVerifiedRep ? (
                             <div className="flex items-center gap-1 text-[10px] text-[#22C55E] font-medium">

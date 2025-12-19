@@ -31,10 +31,10 @@ export default function Home() {
       {/* Navbar */}
       <nav className="w-full max-w-6xl mx-auto px-6 py-5 flex justify-between items-center">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-[#4F9EF8] rounded-lg flex items-center justify-center">
-            <BookOpen className="text-white w-5 h-5" />
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center overflow-hidden">
+            <img src="/suiecho-logo.svg" alt="Suiecho Logo" className="w-full h-full object-contain" />
           </div>
-          <span className="text-xl font-semibold tracking-tight">Sui-Echo</span>
+          <span className="text-xl font-semibold tracking-tight">Suiecho</span>
         </div>
         <div className="flex items-center gap-4">
           <Link href="/dashboard" className="hidden sm:flex items-center gap-2 text-sm text-[#8A919E] hover:text-white transition-colors">
