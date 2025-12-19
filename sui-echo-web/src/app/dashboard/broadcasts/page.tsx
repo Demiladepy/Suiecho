@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from "react";
 import VoiceRecorder from "@/components/VoiceRecorder";
-import { uploadToWalrus } from "@/lib/walrus";
 import { Radio, ShieldCheck, Users, Link as IconLink, Upload, Loader2, RefreshCw, Play } from "lucide-react";
 import { getSuiClient, getZkLoginAddress, isZkLoginSessionValid, executeZkLoginTransaction } from "@/utils/zklogin-proof";
-import { PACKAGE_ID, SUI_NETWORK } from "@/config";
+import { uploadToWalrus, getWalrusUrl } from "@/lib/walrus";
+import { TARGETS, isContractConfigured } from "@/lib/contract";
+import { SUI_NETWORK } from "@/config";
 import { useRouter } from "next/navigation";
 import { Transaction } from "@mysten/sui/transactions";
 
@@ -96,7 +97,7 @@ export default function BroadcastsPage() {
     }
 
     const handlePublish = async () => {
-        if (!audioBlob || !courseCode || !message || !PACKAGE_ID) return;
+        if (!audioBlob || !courseCode || !message || !isContractConfigured()) return;
         setUploading(true);
 
         try {
@@ -107,7 +108,7 @@ export default function BroadcastsPage() {
             // 2. Create broadcast on-chain using zkLogin
             const tx = new Transaction();
             tx.moveCall({
-                target: `${PACKAGE_ID}::echo::broadcast`,
+                target: TARGETS.broadcast,
                 arguments: [
                     tx.pure.vector("u8", Array.from(new TextEncoder().encode(courseCode))),
                     tx.pure.vector("u8", Array.from(new TextEncoder().encode(audioBlobId))),
@@ -236,7 +237,7 @@ export default function BroadcastsPage() {
 
                         <button
                             onClick={handlePublish}
-                            disabled={!audioBlob || !courseCode || !message || uploading || !PACKAGE_ID}
+                            disabled={!audioBlob || !courseCode || !message || uploading || !isContractConfigured()}
                             className="w-full mt-6 py-4 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-500 transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2"
                         >
                             {uploading ? (
@@ -249,7 +250,7 @@ export default function BroadcastsPage() {
                             )}
                         </button>
 
-                        {!PACKAGE_ID && (
+                        {!isContractConfigured() && (
                             <p className="text-xs text-yellow-500 text-center mt-3">
                                 ⚠️ Package ID not configured. Deploy the smart contract first.
                             </p>

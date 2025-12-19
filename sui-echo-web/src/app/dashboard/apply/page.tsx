@@ -1,17 +1,20 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState, FormEvent, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, ArrowLeft, Send, CheckCircle2 } from "lucide-react";
+import { Loader2, ArrowLeft, Send, CheckCircle2, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import Sidebar from "@/components/Sidebar";
-import { getZkLoginAddress } from "@/utils/zklogin-proof";
+import { getZkLoginAddress, isZkLoginSessionValid, executeZkLoginTransaction } from "@/utils/zklogin-proof";
+import { TARGETS, COURSE_REP_REGISTRY_ID, isContractConfigured } from "@/lib/contract";
+import { Transaction } from "@mysten/sui/transactions";
 
 export default function ApplyPage() {
     const router = useRouter();
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSubmitted, setIsSubmitted] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [txDigest, setTxDigest] = useState<string | null>(null);
 
     const [formData, setFormData] = useState({
         courseCode: "",
@@ -20,6 +23,12 @@ export default function ApplyPage() {
         department: "",
         reason: "",
     });
+
+    useEffect(() => {
+        if (!isZkLoginSessionValid()) {
+            router.push("/");
+        }
+    }, [router]);
 
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
@@ -32,28 +41,32 @@ export default function ApplyPage() {
                 throw new Error("Please login with zkLogin first");
             }
 
-            // For now, just simulate submission since contract isn't deployed yet
-            // In production, this would call the apply_for_course_rep Move function
+            if (!isContractConfigured()) {
+                throw new Error("Contract not configured. Please set NEXT_PUBLIC_PACKAGE_ID in .env");
+            }
+
             console.log("[Apply] Submitting application:", formData);
             console.log("[Apply] User address:", zkAddress);
 
-            // Simulate network delay
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            // Build transaction to call apply_for_course_rep
+            const tx = new Transaction();
+            tx.moveCall({
+                target: TARGETS.apply_for_course_rep,
+                arguments: [
+                    tx.object(COURSE_REP_REGISTRY_ID),
+                    tx.pure.vector("u8", Array.from(new TextEncoder().encode(formData.courseCode))),
+                    tx.pure.vector("u8", Array.from(new TextEncoder().encode(formData.fullName))),
+                    tx.pure.vector("u8", Array.from(new TextEncoder().encode(formData.studentId))),
+                    tx.pure.vector("u8", Array.from(new TextEncoder().encode(formData.department))),
+                    tx.pure.vector("u8", Array.from(new TextEncoder().encode(formData.reason))),
+                ],
+            });
 
-            // TODO: Call smart contract function apply_for_course_rep
-            // const tx = new Transaction();
-            // tx.moveCall({
-            //     target: `${PACKAGE_ID}::echo::apply_for_course_rep`,
-            //     arguments: [
-            //         tx.object(COURSE_REP_REGISTRY_ID),
-            //         tx.pure.vector("u8", Array.from(new TextEncoder().encode(formData.courseCode))),
-            //         tx.pure.vector("u8", Array.from(new TextEncoder().encode(formData.fullName))),
-            //         tx.pure.vector("u8", Array.from(new TextEncoder().encode(formData.studentId))),
-            //         tx.pure.vector("u8", Array.from(new TextEncoder().encode(formData.department))),
-            //         tx.pure.vector("u8", Array.from(new TextEncoder().encode(formData.reason))),
-            //     ],
-            // });
+            // Execute with zkLogin
+            const result = await executeZkLoginTransaction(tx);
+            console.log("[Apply] Transaction result:", result);
 
+            setTxDigest(result.digest);
             setIsSubmitted(true);
         } catch (err: any) {
             console.error("[Apply] Error:", err);
@@ -73,10 +86,20 @@ export default function ApplyPage() {
                             <CheckCircle2 size={40} className="text-green-400" />
                         </div>
                         <h1 className="text-2xl font-bold mb-4">Application Submitted!</h1>
-                        <p className="text-gray-400 mb-8">
+                        <p className="text-gray-400 mb-4">
                             Your course rep application has been submitted for admin review.
                             You'll receive a CourseRepCap once approved.
                         </p>
+                        {txDigest && (
+                            <a
+                                href={`https://suiscan.xyz/testnet/tx/${txDigest}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-blue-400 hover:underline mb-8 block"
+                            >
+                                View transaction on Suiscan →
+                            </a>
+                        )}
                         <Link
                             href="/dashboard"
                             className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 rounded-xl font-bold transition-colors"
@@ -100,6 +123,16 @@ export default function ApplyPage() {
                     >
                         <ArrowLeft size={16} /> Back to Dashboard
                     </Link>
+
+                    {!isContractConfigured() && (
+                        <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl flex items-start gap-3">
+                            <AlertTriangle className="text-yellow-500 shrink-0" size={20} />
+                            <div>
+                                <p className="text-sm text-yellow-500 font-bold">Contract Not Configured</p>
+                                <p className="text-xs text-yellow-500/70">Set NEXT_PUBLIC_PACKAGE_ID in your .env file</p>
+                            </div>
+                        </div>
+                    )}
 
                     <div className="bg-[#0F172A] border border-white/10 rounded-3xl p-8">
                         <h1 className="text-2xl font-bold mb-2">Apply to be a Course Rep</h1>
@@ -189,13 +222,13 @@ export default function ApplyPage() {
 
                             <button
                                 type="submit"
-                                disabled={isSubmitting}
+                                disabled={isSubmitting || !isContractConfigured()}
                                 className="w-full py-4 bg-blue-600 hover:bg-blue-500 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
                             >
                                 {isSubmitting ? (
                                     <>
                                         <Loader2 size={18} className="animate-spin" />
-                                        Submitting...
+                                        Submitting to blockchain...
                                     </>
                                 ) : (
                                     <>

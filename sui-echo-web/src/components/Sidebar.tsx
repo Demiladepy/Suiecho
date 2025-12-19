@@ -5,7 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { Activity, Radio, ShieldCheck, LogOut, User, Copy, Check, AlertCircle, FileText, BookOpen } from "lucide-react";
 import { useEffect, useState } from "react";
 import { jwtDecode } from "jwt-decode";
-import { clearZkLoginSession, getZkLoginAddress, isZkLoginSessionValid } from "@/utils/zklogin-proof";
+import { clearZkLoginSession, getZkLoginAddress, isZkLoginSessionValid, getSuiClient } from "@/utils/zklogin-proof";
+import { PACKAGE_ID } from "@/lib/contract";
 
 type UserRole = 'student' | 'rep' | null;
 
@@ -17,36 +18,59 @@ export default function Sidebar() {
     const [copied, setCopied] = useState(false);
     const [isVerifiedRep, setIsVerifiedRep] = useState(false);
     const [userRole, setUserRole] = useState<UserRole>(null);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Get zkLogin address
-        const address = getZkLoginAddress();
-        setZkAddress(address);
+        async function initSidebar() {
+            // Get zkLogin address
+            const address = getZkLoginAddress();
+            setZkAddress(address);
 
-        // Get user role from session
-        const role = window.sessionStorage.getItem("sui_echo_user_role") as UserRole;
-        setUserRole(role);
+            // Get user role from session
+            const role = window.sessionStorage.getItem("sui_echo_user_role") as UserRole;
+            setUserRole(role);
 
-        // Get email from JWT
-        const token = window.sessionStorage.getItem("sui_zklogin_jwt");
-        if (token) {
-            try {
-                const decoded: any = jwtDecode(token);
-                setUserEmail(decoded.email);
-            } catch (e) {
-                console.error("Failed to decode token", e);
+            // Get email from JWT
+            const token = window.sessionStorage.getItem("sui_zklogin_jwt");
+            if (token) {
+                try {
+                    const decoded: any = jwtDecode(token);
+                    setUserEmail(decoded.email);
+                } catch (e) {
+                    console.error("Failed to decode token", e);
+                }
+            }
+
+            // Check on-chain if user has CourseRepCap
+            if (address && PACKAGE_ID) {
+                try {
+                    const client = getSuiClient();
+                    const objects = await client.getOwnedObjects({
+                        owner: address,
+                        filter: { StructType: `${PACKAGE_ID}::echo::CourseRepCap` },
+                        options: { showType: true },
+                    });
+
+                    if (objects.data.length > 0) {
+                        console.log("[Sidebar] User is a verified course rep!");
+                        setIsVerifiedRep(true);
+                    }
+                } catch (error) {
+                    console.error("[Sidebar] Error checking CourseRepCap:", error);
+                }
+            }
+
+            setLoading(false);
+
+            // Redirect if not logged in
+            if (!isZkLoginSessionValid()) {
+                router.push("/");
             }
         }
 
-        // TODO: Check on-chain if user has CourseRepCap
-        // This would require querying owned objects for CourseRepCap type
-        // setIsVerifiedRep(checkIfVerifiedRep(address));
-
-        // Redirect if not logged in
-        if (!isZkLoginSessionValid()) {
-            router.push("/");
-        }
+        initSidebar();
     }, [router]);
+
 
     const handleLogout = () => {
         clearZkLoginSession();
@@ -67,7 +91,9 @@ export default function Sidebar() {
         { name: "Dashboard", href: "/dashboard", icon: Activity },
         { name: "Broadcasts", href: "/dashboard/broadcasts", icon: Radio },
         { name: "Verification", href: "/dashboard/verification", icon: ShieldCheck },
+        { name: "Admin Panel", href: "/dashboard/admin", icon: ShieldCheck },
     ];
+
 
     const studentNavItems = [
         { name: "Dashboard", href: "/dashboard", icon: Activity },

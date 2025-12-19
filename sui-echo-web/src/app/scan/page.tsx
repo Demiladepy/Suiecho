@@ -3,14 +3,13 @@
 import { useState, useEffect } from "react";
 import Scanner from "@/components/Scanner";
 import { uploadToWalrus } from "@/lib/walrus";
+import { TARGETS, isContractConfigured } from "@/lib/contract";
+import { TEE_WORKER_URL } from "@/config";
 import { ConnectButton, useCurrentAccount, useSignAndExecuteTransaction } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
-import { Volume2, Upload, FileText, ArrowRight, X, Loader2, CheckCircle2 } from "lucide-react";
+import { Volume2, Upload, FileText, ArrowRight, X, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import Link from "next/link";
 
-// Package ID should be updated after deployment
-const PACKAGE_ID = process.env.NEXT_PUBLIC_PACKAGE_ID;
-const TEE_WORKER_URL = process.env.NEXT_PUBLIC_TEE_WORKER_URL;
 
 export default function ScanPage() {
     const account = useCurrentAccount();
@@ -54,7 +53,7 @@ export default function ScanPage() {
             // 2. Mint Handout on Sui
             const tx = new Transaction();
             tx.moveCall({
-                target: `${PACKAGE_ID}::echo::mint_handout`,
+                target: TARGETS.mint_handout,
                 arguments: [
                     tx.pure.vector("u8", Array.from(new TextEncoder().encode(id))),
                     tx.pure.vector("u8", Array.from(new TextEncoder().encode(`Scanned: ${text.slice(0, 20)}...`))),
