@@ -65,22 +65,43 @@ export default function OverviewPage() {
 
         try {
             const client = getSuiClient();
-            const ownedObjects = await client.getOwnedObjects({
-                owner: address,
-                options: { showType: true, showContent: true },
-            });
+            
+            // Fetch all owned objects with pagination support
+            let allObjects: any[] = [];
+            let cursor: string | null = null;
+            
+            do {
+                const response = await client.getOwnedObjects({
+                    owner: address,
+                    options: { showType: true, showContent: true },
+                    cursor: cursor || undefined,
+                });
+                
+                allObjects = allObjects.concat(response.data);
+                cursor = response.hasNextPage ? response.nextCursor || null : null;
+            } while (cursor);
 
             let broadcasts = 0;
             let verifiedHandouts = 0;
             let pendingHandouts = 0;
             const activities: RecentActivity[] = [];
 
-            for (const obj of ownedObjects.data) {
+            for (const obj of allObjects) {
                 const type = obj.data?.type;
                 if (!type) continue;
 
                 if (type.includes("CourseRepBroadcast")) {
                     broadcasts++;
+                    const content = obj.data?.content;
+                    if (content?.dataType === "moveObject") {
+                        const fields = content.fields as any;
+                        activities.push({
+                            file: `Broadcast: ${fields?.course_code || "Unknown"}`,
+                            user: address.slice(0, 6) + "..." + address.slice(-4),
+                            time: "Recently",
+                            status: "success",
+                        });
+                    }
                 } else if (type.includes("Handout")) {
                     const content = obj.data?.content;
                     if (content?.dataType === "moveObject") {
@@ -105,6 +126,13 @@ export default function OverviewPage() {
                     }
                 }
             }
+
+            // Sort activities by most recent (you could add timestamp sorting if available)
+            activities.sort((a, b) => {
+                if (a.status === "success" && b.status === "pending") return -1;
+                if (a.status === "pending" && b.status === "success") return 1;
+                return 0;
+            });
 
             setStats({
                 totalBroadcasts: broadcasts,
@@ -132,16 +160,25 @@ export default function OverviewPage() {
     return (
         <div className="space-y-8">
             {/* Header */}
-            <header>
-                <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight mb-1">
-                    Welcome back, <span className="text-[#4F9EF8]">{userName || "User"}</span>
-                </h1>
-                <p className="text-[#8A919E] text-sm">Here's what's happening in your Sui-Echo network.</p>
-                {zkAddress && (
-                    <p className="text-xs text-[#565B67] font-mono mt-2">
-                        {zkAddress.slice(0, 10)}...{zkAddress.slice(-8)}
-                    </p>
-                )}
+            <header className="flex justify-between items-start">
+                <div>
+                    <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight mb-1">
+                        Welcome back, <span className="text-[#4F9EF8]">{userName || "User"}</span>
+                    </h1>
+                    <p className="text-[#8A919E] text-sm">Here's what's happening in your Sui-Echo network.</p>
+                    {zkAddress && (
+                        <p className="text-xs text-[#565B67] font-mono mt-2">
+                            {zkAddress.slice(0, 10)}...{zkAddress.slice(-8)}
+                        </p>
+                    )}
+                </div>
+                <button
+                    onClick={() => fetchDashboardData(zkAddress)}
+                    className="px-4 py-2 bg-[#12151C] border border-[#1E232E] rounded-lg hover:border-[#2A3140] transition-colors flex items-center gap-2 text-sm text-[#8A919E] hover:text-white"
+                >
+                    <Loader2 size={14} className={loading ? "animate-spin" : ""} />
+                    Refresh
+                </button>
             </header>
 
             {/* Stats Grid */}

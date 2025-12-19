@@ -22,6 +22,7 @@ export default function ApplyPage() {
         studentId: "",
         department: "",
         reason: "",
+        codeWord: "",
     });
 
     useEffect(() => {
@@ -43,6 +44,12 @@ export default function ApplyPage() {
 
             if (!isContractConfigured()) {
                 throw new Error("Contract not configured. Please set NEXT_PUBLIC_PACKAGE_ID in .env");
+            }
+
+            // Validate code word
+            const correctCodeWord = "SCHOOL ISNT SCAM";
+            if (formData.codeWord.trim().toUpperCase() !== correctCodeWord.toUpperCase()) {
+                throw new Error(`Invalid code word. Please enter the code word provided by your lecturer.`);
             }
 
             console.log("[Apply] Submitting application:", formData);
@@ -212,6 +219,23 @@ export default function ApplyPage() {
                                     onChange={(e) => setFormData(prev => ({ ...prev, reason: e.target.value }))}
                                     className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-xl text-white placeholder:text-gray-600 focus:outline-none focus:border-blue-500 transition-colors resize-none"
                                 />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-bold text-gray-300 mb-2">
+                                    Code Word (from Lecturer) *
+                                </label>
+                                <input
+                                    type="text"
+                                    required
+                                    placeholder="Enter the code word provided by your lecturer"
+                                    value={formData.codeWord}
+                                    onChange={(e) => setFormData(prev => ({ ...prev, codeWord: e.target.value }))}
+                                    className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-xl text-white placeholder:text-gray-600 focus:outline-none focus:border-blue-500 transition-colors"
+                                />
+                                <p className="text-xs text-gray-500 mt-2">
+                                    You must provide the correct code word given by your lecturer to apply.
+                                </p>
                             </div>
 
                             {error && (

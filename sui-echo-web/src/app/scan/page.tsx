@@ -170,18 +170,28 @@ export default function ScanPage() {
 
     const handleUploadAndMint = async () => {
         if (!text || !isConnected) return;
+        if (!isContractConfigured()) {
+            alert("Contract not configured. Please set NEXT_PUBLIC_PACKAGE_ID in .env");
+            return;
+        }
+        
         setUploading(true);
         setTeeStatus("idle");
         setAttestation(null);
+        setTxDigest("");
+        setBlobId("");
+        setHandoutId("");
 
         try {
             // 1. Upload to Walrus
+            console.log("[Scan] Step 1: Uploading to Walrus...");
             const blob = new Blob([text], { type: "text/plain" });
             const id = await uploadToWalrus(blob);
             setBlobId(id);
             console.log("[Scan] Uploaded to Walrus:", id);
 
             // 2. Build mint transaction
+            console.log("[Scan] Step 2: Building mint transaction...");
             const tx = new Transaction();
             tx.moveCall({
                 target: TARGETS.mint_handout,
@@ -193,49 +203,55 @@ export default function ScanPage() {
 
             // 3. Execute based on auth method
             if (isZkLogin) {
-                console.log("[Scan] Executing with zkLogin (sponsored)...");
+                console.log("[Scan] Step 3: Executing with zkLogin (sponsored)...");
                 const result = await executeSponsoredZkLoginTransaction(tx);
                 setTxDigest(result.digest);
                 console.log("[Scan] Minted on-chain (zkLogin):", result.digest);
+                console.log("[Scan] Transaction result:", result);
 
                 const objectId = parseHandoutObjectId(result);
                 if (objectId) {
                     setHandoutId(objectId);
+                    console.log("[Scan] Step 4: Getting TEE attestation for handout:", objectId);
                     await getAttestation(id, objectId);
                 } else {
-                    console.warn("[Scan] Could not find handout object ID");
+                    console.warn("[Scan] Could not find handout object ID in transaction result");
+                    alert("Handout minted but could not find object ID. Please check the transaction on Suiscan.");
+                    setUploading(false);
                 }
-                setUploading(false);
             } else {
-                console.log("[Scan] Executing with dapp-kit wallet...");
+                console.log("[Scan] Step 3: Executing with dapp-kit wallet...");
                 signAndExecute(
                     { transaction: tx },
                     {
                         onSuccess: async (result) => {
                             setTxDigest(result.digest);
                             console.log("[Scan] Minted on-chain (dapp-kit):", result.digest);
+                            console.log("[Scan] Transaction result:", result);
 
                             const objectId = parseHandoutObjectId(result);
                             if (objectId) {
                                 setHandoutId(objectId);
+                                console.log("[Scan] Step 4: Getting TEE attestation for handout:", objectId);
                                 await getAttestation(id, objectId);
                             } else {
-                                console.warn("[Scan] Could not find handout object ID");
+                                console.warn("[Scan] Could not find handout object ID in transaction result");
+                                alert("Handout minted but could not find object ID. Please check the transaction on Suiscan.");
+                                setUploading(false);
                             }
-                            setUploading(false);
                         },
-                        onError: (err) => {
+                        onError: (err: any) => {
                             console.error("[Scan] Mint error:", err);
                             setUploading(false);
-                            alert("On-chain minting failed.");
+                            alert(`On-chain minting failed: ${err.message || "Unknown error"}\n\nPlease check:\n- You have sufficient SUI for gas\n- Contract is properly configured\n- Network connection is stable`);
                         }
                     }
                 );
             }
         } catch (e: any) {
             console.error("[Scan] Error:", e);
-            alert(`Error: ${e.message || "Unknown error"}`);
             setUploading(false);
+            alert(`Error: ${e.message || "Unknown error"}\n\nPlease check:\n- Contract is properly configured\n- Network connection is stable\n- You have sufficient permissions`);
         }
     };
 

@@ -5,7 +5,7 @@ import VoiceRecorder from "@/components/VoiceRecorder";
 import { Radio, ShieldCheck, Users, Link as IconLink, Upload, Loader2, RefreshCw, Play } from "lucide-react";
 import { getSuiClient, getZkLoginAddress, isZkLoginSessionValid, executeSponsoredZkLoginTransaction } from "@/utils/zklogin-proof";
 import { uploadToWalrus, getWalrusUrl } from "@/lib/walrus";
-import { TARGETS, isContractConfigured } from "@/lib/contract";
+import { TARGETS, isContractConfigured, PACKAGE_ID } from "@/lib/contract";
 import { SUI_NETWORK } from "@/config";
 import { useRouter } from "next/navigation";
 import { Transaction } from "@mysten/sui/transactions";
@@ -37,6 +37,8 @@ export default function BroadcastsPage() {
         tokensEarned: "0 SUI",
     });
     const [zkAddress, setZkAddress] = useState<string | null>(null);
+    const [courseRepCapId, setCourseRepCapId] = useState<string | null>(null);
+    const [isVerifiedRep, setIsVerifiedRep] = useState(false);
 
     useEffect(() => {
         if (!isZkLoginSessionValid()) {
@@ -45,8 +47,30 @@ export default function BroadcastsPage() {
         }
         const address = getZkLoginAddress();
         setZkAddress(address);
+        checkVerifiedRepStatus(address);
         fetchBroadcasts(address);
     }, [router]);
+
+    async function checkVerifiedRepStatus(address: string | null) {
+        if (!address || !isContractConfigured()) return;
+        
+        try {
+            const client = getSuiClient();
+            const objects = await client.getOwnedObjects({
+                owner: address,
+                filter: { StructType: `${PACKAGE_ID}::echo::CourseRepCap` },
+                options: { showType: true, showContent: true },
+            });
+
+            if (objects.data.length > 0) {
+                setIsVerifiedRep(true);
+                const capId = objects.data[0].data?.objectId;
+                if (capId) setCourseRepCapId(capId);
+            }
+        } catch (error) {
+            console.error("[Broadcasts] Error checking CourseRepCap:", error);
+        }
+    }
 
     async function fetchBroadcasts(address: string | null) {
         if (!address) {
@@ -107,14 +131,29 @@ export default function BroadcastsPage() {
 
             // 2. Create broadcast on-chain using zkLogin
             const tx = new Transaction();
-            tx.moveCall({
-                target: TARGETS.broadcast,
-                arguments: [
-                    tx.pure.vector("u8", Array.from(new TextEncoder().encode(courseCode))),
-                    tx.pure.vector("u8", Array.from(new TextEncoder().encode(audioBlobId))),
-                    tx.pure.vector("u8", Array.from(new TextEncoder().encode(message))),
-                ],
-            });
+            
+            // Use verified rep function if user has CourseRepCap, otherwise use generic broadcast
+            if (isVerifiedRep && courseRepCapId) {
+                console.log("[Broadcasts] Using verified rep broadcast function");
+                tx.moveCall({
+                    target: TARGETS.broadcast_verified,
+                    arguments: [
+                        tx.object(courseRepCapId),
+                        tx.pure.vector("u8", Array.from(new TextEncoder().encode(audioBlobId))),
+                        tx.pure.vector("u8", Array.from(new TextEncoder().encode(message))),
+                    ],
+                });
+            } else {
+                console.log("[Broadcasts] Using generic broadcast function");
+                tx.moveCall({
+                    target: TARGETS.broadcast,
+                    arguments: [
+                        tx.pure.vector("u8", Array.from(new TextEncoder().encode(courseCode))),
+                        tx.pure.vector("u8", Array.from(new TextEncoder().encode(audioBlobId))),
+                        tx.pure.vector("u8", Array.from(new TextEncoder().encode(message))),
+                    ],
+                });
+            }
 
             const result = await executeSponsoredZkLoginTransaction(tx);
             console.log("[Broadcasts] Transaction result (sponsored):", result);
@@ -128,11 +167,12 @@ export default function BroadcastsPage() {
             setAudioBlob(null);
 
             // Refresh list
-            fetchBroadcasts(zkAddress);
+            await fetchBroadcasts(zkAddress);
 
         } catch (e: any) {
             console.error("[Broadcasts] Error:", e);
-            alert(`Failed to create broadcast: ${e.message || "Unknown error"}`);
+            const errorMsg = e.message || "Unknown error";
+            alert(`Failed to create broadcast: ${errorMsg}\n\nPlease check:\n- You have a verified CourseRepCap (if using verified function)\n- Contract is properly configured\n- Network connection is stable`);
         } finally {
             setUploading(false);
         }
@@ -183,9 +223,16 @@ export default function BroadcastsPage() {
 
                     {/* Create Post Section */}
                     <div className="glass-panel p-6 lg:p-8 rounded-[2.5rem] border border-white/10 bg-white/5">
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/20"><IconLink size={20} /></div>
-                            <h2 className="text-xl font-bold">New Broadcast</h2>
+                        <div className="flex items-center justify-between mb-6">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/20"><IconLink size={20} /></div>
+                                <h2 className="text-xl font-bold">New Broadcast</h2>
+                            </div>
+                            {isVerifiedRep && (
+                                <span className="px-3 py-1 bg-green-500/20 text-green-400 text-xs font-bold rounded-full border border-green-500/30 flex items-center gap-2">
+                                    <ShieldCheck size={12} /> Verified Rep
+                                </span>
+                            )}
                         </div>
 
                         <div className="grid md:grid-cols-2 gap-6 mb-6">
