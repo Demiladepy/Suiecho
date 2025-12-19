@@ -537,12 +537,26 @@ export async function executeSponsoredZkLoginTransaction(
     }
 
     const executeResult = await executeResponse.json();
-    console.log("[zkLogin] Sponsored transaction executed:", executeResult.digest);
+    const finalDigest = executeResult.digest;
+    console.log("[zkLogin] Sponsored transaction executed:", finalDigest);
+
+    // 10. Query the transaction to get objectChanges and events
+    console.log("[zkLogin] Querying transaction details...");
+    await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for indexing
+
+    const txDetails = await client.getTransactionBlock({
+        digest: finalDigest,
+        options: {
+            showEffects: true,
+            showObjectChanges: true,
+            showEvents: true,
+        },
+    });
 
     return {
-        digest: executeResult.digest,
-        effects: null,
-        objectChanges: null,
-        events: null,
+        digest: finalDigest,
+        effects: txDetails.effects,
+        objectChanges: txDetails.objectChanges,
+        events: txDetails.events,
     };
 }
