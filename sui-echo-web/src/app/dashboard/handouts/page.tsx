@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { ShieldCheck, FileText, ExternalLink, Search, Filter, Loader2, RefreshCw, Clock } from "lucide-react";
-import { getSuiClient, getZkLoginAddress, isZkLoginSessionValid } from "@/utils/zklogin-proof";
+import { useState, useEffect, useCallback } from "react";
+import { ShieldCheck, FileText, ExternalLink, Search, Loader2, RefreshCw, Clock, Gift, Volume2, VolumeX } from "lucide-react";
+import { getSuiClient, getZkLoginAddress, isZkLoginSessionValid, executeSponsoredZkLoginTransaction } from "@/utils/zklogin-proof";
 import { PACKAGE_ID, SUI_NETWORK } from "@/config";
+import { TARGETS, ALUMNI_AJO_ID, isContractConfigured } from "@/lib/contract";
+import { Transaction } from "@mysten/sui/transactions";
 import { useRouter } from "next/navigation";
 
 interface Handout {
@@ -16,18 +18,58 @@ interface Handout {
     objectId: string;
 }
 
-export default function VerificationPage() {
+export default function HandoutsPage() {
     const router = useRouter();
     const [filter, setFilter] = useState("all");
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [handouts, setHandouts] = useState<Handout[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
-    const [stats, setStats] = useState({
-        pending: 0,
-        verified: 0,
-        total: 0,
-    });
+    const [claimingId, setClaimingId] = useState<string | null>(null);
+    const [speakingId, setSpeakingId] = useState<string | null>(null);
+    const [stats, setStats] = useState({ pending: 0, verified: 0, total: 0 });
+
+    // Text-to-speech function
+    const speakHandout = useCallback(async (handout: Handout) => {
+        if (speakingId === handout.id) {
+            // Stop speaking
+            window.speechSynthesis.cancel();
+            setSpeakingId(null);
+            return;
+        }
+
+        if (!handout.blobId) {
+            announce("No content available for this handout");
+            return;
+        }
+
+        setSpeakingId(handout.id);
+        announce("Loading handout content");
+
+        try {
+            const response = await fetch(`https://aggregator.walrus-testnet.walrus.space/v1/${handout.blobId}`);
+            const text = await response.text();
+
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = 0.9;
+            utterance.onend = () => setSpeakingId(null);
+            utterance.onerror = () => {
+                setSpeakingId(null);
+                announce("Failed to read content");
+            };
+
+            window.speechSynthesis.speak(utterance);
+        } catch {
+            setSpeakingId(null);
+            announce("Failed to load handout content");
+        }
+    }, [speakingId]);
+
+    // Announce for screen readers
+    const announce = (message: string) => {
+        const el = document.getElementById("sr-announcer");
+        if (el) el.textContent = message;
+    };
 
     useEffect(() => {
         if (!isZkLoginSessionValid()) {
@@ -46,16 +88,13 @@ export default function VerificationPage() {
 
         try {
             const client = getSuiClient();
-
-            // Fetch user's owned Handout objects
             const ownedObjects = await client.getOwnedObjects({
                 owner: address,
                 options: { showType: true, showContent: true },
             });
 
             const handoutList: Handout[] = [];
-            let pending = 0;
-            let verified = 0;
+            let pending = 0, verified = 0;
 
             for (const obj of ownedObjects.data) {
                 const type = obj.data?.type;
@@ -67,11 +106,8 @@ export default function VerificationPage() {
                 const fields = content.fields as any;
                 const isVerified = fields?.verified === true;
 
-                if (isVerified) {
-                    verified++;
-                } else {
-                    pending++;
-                }
+                if (isVerified) verified++;
+                else pending++;
 
                 handoutList.push({
                     id: obj.data?.objectId || "",
@@ -85,14 +121,9 @@ export default function VerificationPage() {
             }
 
             setHandouts(handoutList);
-            setStats({
-                pending,
-                verified,
-                total: pending + verified,
-            });
-
+            setStats({ pending, verified, total: pending + verified });
         } catch (error) {
-            console.error("[Verification] Error fetching handouts:", error);
+            console.error("[Handouts] Error fetching:", error);
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -101,7 +132,9 @@ export default function VerificationPage() {
 
     const handleRefresh = async () => {
         setRefreshing(true);
+        announce("Refreshing handouts");
         await fetchHandouts();
+        announce(`Found ${handouts.length} handouts`);
     };
 
     const filteredHandouts = handouts.filter(h => {
@@ -119,188 +152,230 @@ export default function VerificationPage() {
         window.open(explorerUrl, '_blank');
     };
 
+    const handleClaimReward = async (handoutObjectId: string) => {
+        if (!isContractConfigured() || !ALUMNI_AJO_ID) {
+            announce("Contract not configured");
+            return;
+        }
+
+        setClaimingId(handoutObjectId);
+        announce("Claiming reward");
+
+        try {
+            const tx = new Transaction();
+            tx.moveCall({
+                target: TARGETS.claim_reward,
+                arguments: [
+                    tx.object(ALUMNI_AJO_ID),
+                    tx.object(handoutObjectId),
+                    tx.pure.vector("u8", Array.from(new TextEncoder().encode("GENERAL"))),
+                ],
+            });
+
+            const result = await executeSponsoredZkLoginTransaction(tx);
+            announce("Reward claimed successfully");
+            await fetchHandouts();
+        } catch (e: any) {
+            console.error("[Handouts] Claim error:", e);
+            announce("Failed to claim reward");
+        } finally {
+            setClaimingId(null);
+        }
+    };
+
     if (loading) {
         return (
-            <div className="flex items-center justify-center min-h-[60vh]">
-                <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+            <div className="flex items-center justify-center min-h-[60vh]" role="status" aria-label="Loading handouts">
+                <Loader2 className="w-6 h-6 text-[#4F9EF8] animate-spin" aria-hidden="true" />
+                <span className="sr-only">Loading handouts</span>
             </div>
         );
     }
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-500">
-            <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-                <div>
-                    <h1 className="text-4xl font-black mb-2 tracking-tight">Handout Verification</h1>
-                    <p className="text-gray-400 font-medium text-lg">Validate scanned handouts and track verification status.</p>
+        <main className="space-y-6" role="main" aria-label="Handouts page">
+            {/* Screen reader announcer */}
+            <div id="sr-announcer" className="sr-only" aria-live="polite" aria-atomic="true" />
+
+            {/* Header */}
+            <header>
+                <h1 className="text-2xl font-semibold tracking-tight mb-1">My Handouts</h1>
+                <p className="text-[#8A919E] text-sm">Manage your scanned handouts and claim rewards</p>
+            </header>
+
+            {/* Controls */}
+            <div className="flex flex-col sm:flex-row gap-4 justify-between">
+                {/* Search */}
+                <div className="relative flex-1 max-w-sm">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#565B67]" size={16} aria-hidden="true" />
+                    <input
+                        type="search"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full bg-[#12151C] border border-[#1E232E] rounded-lg pl-10 pr-4 py-2.5 text-sm focus:border-[#4F9EF8] outline-none transition-colors"
+                        placeholder="Search handouts..."
+                        aria-label="Search handouts"
+                    />
                 </div>
-                <div className="flex items-center gap-4">
-                    <button
-                        onClick={handleRefresh}
-                        disabled={refreshing}
-                        className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-all disabled:opacity-50"
-                    >
-                        <RefreshCw size={18} className={refreshing ? "animate-spin" : ""} />
-                    </button>
-                    <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10 shrink-0">
+
+                {/* Filter + Refresh */}
+                <div className="flex items-center gap-3">
+                    <div className="flex bg-[#12151C] p-1 rounded-lg border border-[#1E232E]" role="tablist" aria-label="Filter handouts">
                         {["all", "pending", "verified"].map((f) => (
                             <button
                                 key={f}
                                 onClick={() => setFilter(f)}
-                                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${filter === f ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20" : "text-gray-500 hover:text-white"}`}
+                                role="tab"
+                                aria-selected={filter === f}
+                                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${filter === f
+                                        ? "bg-[#4F9EF8] text-white"
+                                        : "text-[#8A919E] hover:text-white"
+                                    }`}
                             >
-                                {f}
+                                {f.charAt(0).toUpperCase() + f.slice(1)}
                             </button>
                         ))}
                     </div>
-                </div>
-            </header>
-
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-                {/* Stats */}
-                <div className="lg:col-span-1 space-y-6">
-                    <div className="glass-panel p-6 rounded-3xl bg-blue-600/10 border border-blue-500/20">
-                        <h3 className="text-blue-400 text-xs font-black uppercase tracking-widest mb-4">Your Handouts</h3>
-                        <div className="flex items-end gap-2 mb-2">
-                            <span className="text-4xl font-black">{stats.total}</span>
-                            <span className="text-gray-500 text-xs font-bold mb-1">total</span>
-                        </div>
-                        <p className="text-sm text-blue-200/50 font-medium">
-                            {stats.verified} verified, {stats.pending} pending
-                        </p>
-                    </div>
-
-                    <div className="glass-panel p-6 rounded-3xl bg-white/5 border border-white/10">
-                        <h3 className="text-gray-500 text-xs font-black uppercase tracking-widest mb-6">Status Breakdown</h3>
-                        <div className="space-y-4">
-                            <div className="flex justify-between items-center">
-                                <span className="text-sm font-bold text-gray-300">Pending</span>
-                                <span className="px-2 py-0.5 bg-yellow-500/20 text-yellow-400 text-[10px] font-black rounded-lg">{stats.pending}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-sm font-bold text-gray-300">Verified</span>
-                                <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-[10px] font-black rounded-lg">{stats.verified}</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    {stats.pending > 0 && (
-                        <div className="glass-panel p-6 rounded-3xl bg-yellow-500/10 border border-yellow-500/20">
-                            <div className="flex items-center gap-2 mb-2">
-                                <Clock size={16} className="text-yellow-400" />
-                                <h3 className="text-yellow-400 text-xs font-black uppercase">TEE Processing</h3>
-                            </div>
-                            <p className="text-sm text-yellow-200/60">
-                                Pending handouts will be verified by the TEE automatically once the service is ready.
-                            </p>
-                        </div>
-                    )}
-                </div>
-
-                {/* Handout List */}
-                <div className="lg:col-span-3">
-                    <div className="glass-panel rounded-[2.5rem] bg-white/5 border border-white/10 overflow-hidden">
-                        <div className="p-6 border-b border-white/5 flex flex-col md:flex-row gap-4 justify-between items-center">
-                            <div className="relative w-full md:w-96">
-                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
-                                <input
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="w-full bg-[#0F172A]/50 border border-white/10 rounded-2xl pl-12 pr-4 py-3 text-sm focus:border-blue-500/50 outline-none transition-all"
-                                    placeholder="Search by description or blob ID..."
-                                />
-                            </div>
-                            <span className="text-xs text-gray-500 font-medium">
-                                Showing {filteredHandouts.length} of {handouts.length} handouts
-                            </span>
-                        </div>
-
-                        {filteredHandouts.length > 0 ? (
-                            <div className="overflow-x-auto">
-                                <table className="w-full">
-                                    <thead>
-                                        <tr className="text-left border-b border-white/5">
-                                            <th className="px-8 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Document</th>
-                                            <th className="px-8 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Blob ID</th>
-                                            <th className="px-8 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Status</th>
-                                            <th className="px-8 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-white/5">
-                                        {filteredHandouts.map((h) => (
-                                            <tr key={h.id} className="group hover:bg-white/[0.02] transition-colors">
-                                                <td className="px-8 py-6">
-                                                    <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-blue-400 group-hover:scale-110 transition-transform">
-                                                            <FileText size={20} />
-                                                        </div>
-                                                        <div>
-                                                            <h4 className="text-sm font-bold text-white mb-0.5">{h.file}</h4>
-                                                            <p className="text-[10px] text-gray-500 font-medium">{h.date}</p>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="px-8 py-6">
-                                                    <button
-                                                        onClick={() => {
-                                                            navigator.clipboard.writeText(h.blobId);
-                                                            alert("Blob ID copied!");
-                                                        }}
-                                                        className="text-xs font-mono text-gray-400 bg-white/5 px-2 py-1 rounded-lg border border-white/5 hover:bg-blue-500/20 hover:text-blue-400 transition-all cursor-pointer"
-                                                        title="Click to copy full Blob ID"
-                                                    >
-                                                        {h.blobId ? h.blobId.slice(0, 12) + "..." : "N/A"}
-                                                    </button>
-                                                </td>
-                                                <td className="px-8 py-6">
-                                                    <div className="flex items-center gap-2">
-                                                        {h.status === "pending" && <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />}
-                                                        {h.status === "verified" && <ShieldCheck size={14} className="text-green-500" />}
-                                                        <span className={`text-[10px] font-black uppercase tracking-widest ${h.status === "verified" ? "text-green-400" : "text-yellow-400"}`}>
-                                                            {h.status}
-                                                        </span>
-                                                    </div>
-                                                </td>
-                                                <td className="px-8 py-6">
-                                                    <div className="flex items-center gap-2">
-                                                        {h.blobId && (
-                                                            <a
-                                                                href={`/reader?blobId=${h.blobId}`}
-                                                                className="p-2 rounded-xl bg-white/5 border border-white/10 hover:bg-green-600 hover:border-green-500 hover:text-white transition-all text-gray-400"
-                                                                title="Open in Reader"
-                                                            >
-                                                                <FileText size={18} />
-                                                            </a>
-                                                        )}
-                                                        <button
-                                                            onClick={() => openOnExplorer(h.objectId)}
-                                                            className="p-2 rounded-xl bg-white/5 border border-white/10 hover:bg-blue-600 hover:border-blue-500 hover:text-white transition-all text-gray-400"
-                                                            title="View on Sui Explorer"
-                                                        >
-                                                            <ExternalLink size={18} />
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        ) : (
-                            <div className="p-16 text-center">
-                                <FileText size={48} className="text-gray-700 mx-auto mb-4" />
-                                <h3 className="text-lg font-bold text-gray-400 mb-2">No Handouts Found</h3>
-                                <p className="text-sm text-gray-600 mb-6">
-                                    {searchQuery ? "Try a different search term." : "Start scanning handouts to see them here."}
-                                </p>
-                                <a href="/scan" className="inline-block px-6 py-3 bg-blue-600 hover:bg-blue-500 rounded-xl font-bold text-sm transition-colors">
-                                    Scan Your First Handout
-                                </a>
-                            </div>
-                        )}
-                    </div>
+                    <button
+                        onClick={handleRefresh}
+                        disabled={refreshing}
+                        className="p-2.5 bg-[#12151C] border border-[#1E232E] rounded-lg hover:border-[#2A3140] transition-colors disabled:opacity-50"
+                        aria-label="Refresh handouts"
+                    >
+                        <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} aria-hidden="true" />
+                    </button>
                 </div>
             </div>
-        </div>
+
+            {/* Stats */}
+            <div className="grid grid-cols-3 gap-4">
+                <div className="bg-[#12151C] border border-[#1E232E] rounded-lg p-4">
+                    <p className="text-xs text-[#8A919E] mb-1">Total</p>
+                    <p className="text-xl font-semibold">{stats.total}</p>
+                </div>
+                <div className="bg-[#12151C] border border-[#1E232E] rounded-lg p-4">
+                    <p className="text-xs text-[#22C55E] mb-1">Verified</p>
+                    <p className="text-xl font-semibold">{stats.verified}</p>
+                </div>
+                <div className="bg-[#12151C] border border-[#1E232E] rounded-lg p-4">
+                    <p className="text-xs text-[#EAB308] mb-1">Pending</p>
+                    <p className="text-xl font-semibold">{stats.pending}</p>
+                </div>
+            </div>
+
+            {/* Handouts List */}
+            {filteredHandouts.length > 0 ? (
+                <ul className="space-y-3" role="list" aria-label="Handout list">
+                    {filteredHandouts.map((h) => (
+                        <li
+                            key={h.id}
+                            className="bg-[#12151C] border border-[#1E232E] rounded-xl p-4 hover:border-[#2A3140] transition-colors"
+                            role="listitem"
+                        >
+                            <div className="flex items-center justify-between gap-4">
+                                {/* Info */}
+                                <div className="flex items-center gap-4 min-w-0 flex-1">
+                                    <div className="w-10 h-10 rounded-lg bg-[#1A1E28] flex items-center justify-center shrink-0" aria-hidden="true">
+                                        <FileText size={18} className="text-[#4F9EF8]" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <h3 className="font-medium text-sm truncate">{h.file}</h3>
+                                        <p className="text-xs text-[#565B67] truncate font-mono">
+                                            {h.blobId ? h.blobId.slice(0, 16) + "..." : "No blob ID"}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Status */}
+                                <div className="flex items-center gap-2 shrink-0">
+                                    {h.status === "verified" ? (
+                                        <span className="flex items-center gap-1 px-2 py-1 bg-[#22C55E]/10 text-[#22C55E] text-xs font-medium rounded">
+                                            <ShieldCheck size={12} aria-hidden="true" />
+                                            Verified
+                                        </span>
+                                    ) : (
+                                        <span className="flex items-center gap-1 px-2 py-1 bg-[#EAB308]/10 text-[#EAB308] text-xs font-medium rounded">
+                                            <Clock size={12} aria-hidden="true" />
+                                            Pending
+                                        </span>
+                                    )}
+                                </div>
+
+                                {/* Actions */}
+                                <div className="flex items-center gap-2 shrink-0">
+                                    {/* Listen Button */}
+                                    <button
+                                        onClick={() => speakHandout(h)}
+                                        className={`p-2 rounded-lg transition-colors ${speakingId === h.id
+                                                ? "bg-[#4F9EF8] text-white"
+                                                : "bg-[#1A1E28] text-[#8A919E] hover:text-white hover:bg-[#4F9EF8]/20"
+                                            }`}
+                                        aria-label={speakingId === h.id ? "Stop listening" : "Listen to handout"}
+                                        aria-pressed={speakingId === h.id}
+                                    >
+                                        {speakingId === h.id ? (
+                                            <VolumeX size={16} aria-hidden="true" />
+                                        ) : (
+                                            <Volume2 size={16} aria-hidden="true" />
+                                        )}
+                                    </button>
+
+                                    {/* Claim Reward */}
+                                    {h.status === "verified" && (
+                                        <button
+                                            onClick={() => handleClaimReward(h.objectId)}
+                                            disabled={claimingId === h.objectId}
+                                            className="p-2 rounded-lg bg-[#EAB308]/10 text-[#EAB308] hover:bg-[#EAB308] hover:text-black transition-colors disabled:opacity-50"
+                                            aria-label="Claim reward"
+                                            aria-busy={claimingId === h.objectId}
+                                        >
+                                            {claimingId === h.objectId ? (
+                                                <Loader2 size={16} className="animate-spin" aria-hidden="true" />
+                                            ) : (
+                                                <Gift size={16} aria-hidden="true" />
+                                            )}
+                                        </button>
+                                    )}
+
+                                    {/* Open Reader */}
+                                    {h.blobId && (
+                                        <a
+                                            href={`/reader?blobId=${h.blobId}`}
+                                            className="p-2 rounded-lg bg-[#1A1E28] text-[#8A919E] hover:text-[#22C55E] hover:bg-[#22C55E]/10 transition-colors"
+                                            aria-label="Open in reader"
+                                        >
+                                            <FileText size={16} aria-hidden="true" />
+                                        </a>
+                                    )}
+
+                                    {/* Explorer */}
+                                    <button
+                                        onClick={() => openOnExplorer(h.objectId)}
+                                        className="p-2 rounded-lg bg-[#1A1E28] text-[#8A919E] hover:text-[#4F9EF8] hover:bg-[#4F9EF8]/10 transition-colors"
+                                        aria-label="View on Sui Explorer"
+                                    >
+                                        <ExternalLink size={16} aria-hidden="true" />
+                                    </button>
+                                </div>
+                            </div>
+                        </li>
+                    ))}
+                </ul>
+            ) : (
+                <div className="bg-[#12151C] border border-[#1E232E] rounded-xl p-12 text-center" role="status">
+                    <FileText size={40} className="text-[#565B67] mx-auto mb-4" aria-hidden="true" />
+                    <h3 className="font-medium mb-1">No Handouts Found</h3>
+                    <p className="text-sm text-[#565B67] mb-4">
+                        {searchQuery ? "Try a different search term" : "Start scanning handouts to see them here"}
+                    </p>
+                    <a
+                        href="/scan"
+                        className="inline-block px-4 py-2 bg-[#4F9EF8] text-white text-sm font-medium rounded-lg hover:opacity-90 transition-opacity"
+                    >
+                        Scan Your First Handout
+                    </a>
+                </div>
+            )}
+        </main>
     );
 }
