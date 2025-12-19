@@ -2,25 +2,27 @@
 
 import { ConnectButton } from "@mysten/dapp-kit";
 import Link from "next/link";
-import { ArrowRight, BookOpen, ShieldCheck, PlayCircle, Radio, Mic, ChevronRight } from "lucide-react";
+import { ArrowRight, BookOpen, ShieldCheck, PlayCircle, Radio, Mic, ChevronRight, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { prepareZkLogin } from "../utils/zklogin";
+import { prepareZkLoginSession } from "@/utils/zklogin-proof";
 
 export default function Home() {
   const router = useRouter();
   const [role, setRole] = useState<'student' | 'rep'>('student');
   const [isRedirecting, setIsRedirecting] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   const handleGoogleLogin = async () => {
     setIsRedirecting(true);
+    setLoginError(null);
     try {
-      const loginUrl = await prepareZkLogin();
+      const { loginUrl } = await prepareZkLoginSession();
       window.location.href = loginUrl;
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      console.error("[zkLogin] Error:", e);
       setIsRedirecting(false);
-      alert("Failed to initialize zkLogin.");
+      setLoginError(e.message || "Failed to initialize zkLogin. Please try again.");
     }
   };
 

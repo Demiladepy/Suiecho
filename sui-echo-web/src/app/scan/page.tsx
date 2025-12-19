@@ -66,31 +66,67 @@ export default function ScanPage() {
                 {
                     onSuccess: async (result) => {
                         setTxDigest(result.digest);
+                        console.log("[Scan] Minted on-chain:", result.digest);
 
-                        // Notify user of minting success
-                        console.log("Minted on-chain:", result.digest);
+                        // Parse the created Handout object ID from transaction events
+                        let handoutObjectId: string | null = null;
+                        const txResult = result as any; // Cast for optional property access
 
-                        // Trigger Nautilus TEE Verification (Phase 3)
-                        setTeeStatus("verifying");
-                        try {
-                            // In a real TEE, the handoutId would comes from the tx result events
-                            // For MVP, we pass the digest or look up the object. 
-                            // Here we assume the TEE can find the handout.
-                            await fetch(`${TEE_WORKER_URL}/verify`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ blobId: id, handoutId: result.digest }) // ID placeholder
-                            });
-                            setTeeStatus("done");
-                        } catch (err) {
-                            console.error("TEE Error:", err);
-                            setTeeStatus("failed");
+                        // Try to find the created object from objectChanges
+                        if (txResult.objectChanges) {
+                            const createdObjects = txResult.objectChanges.filter(
+                                (change: any) => change.type === 'created'
+                            );
+                            if (createdObjects.length > 0) {
+                                handoutObjectId = createdObjects[0].objectId;
+                                console.log("[Scan] Created handout object:", handoutObjectId);
+                            }
+                        }
+
+                        // Fallback: Try to parse from events
+                        if (!handoutObjectId && txResult.events) {
+                            const mintEvent = txResult.events.find(
+                                (e: any) => e.type?.includes('HandoutMinted')
+                            );
+                            if (mintEvent?.parsedJson?.id) {
+                                handoutObjectId = mintEvent.parsedJson.id;
+                                console.log("[Scan] Parsed handout ID from event:", handoutObjectId);
+                            }
+                        }
+
+                        // Trigger Nautilus TEE Verification
+                        if (handoutObjectId) {
+                            setTeeStatus("verifying");
+                            try {
+                                const teeResponse = await fetch(`${TEE_WORKER_URL}/verify`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        blobId: id,
+                                        handoutId: handoutObjectId
+                                    })
+                                });
+
+                                if (teeResponse.ok) {
+                                    const teeResult = await teeResponse.json();
+                                    console.log("[Scan] TEE verification result:", teeResult);
+                                    setTeeStatus("done");
+                                } else {
+                                    console.error("[Scan] TEE verification failed:", await teeResponse.text());
+                                    setTeeStatus("failed");
+                                }
+                            } catch (err) {
+                                console.error("[Scan] TEE Error:", err);
+                                setTeeStatus("failed");
+                            }
+                        } else {
+                            console.warn("[Scan] Could not find handout object ID, skipping TEE verification");
                         }
 
                         setUploading(false);
                     },
                     onError: (err) => {
-                        console.error("Mint error:", err);
+                        console.error("[Scan] Mint error:", err);
                         setUploading(false);
                         alert("On-chain minting failed, but saved to Walrus.");
                     }
@@ -98,7 +134,7 @@ export default function ScanPage() {
             );
 
         } catch (e) {
-            console.error(e);
+            console.error("[Scan] Upload error:", e);
             alert("Upload failed. See console.");
             setUploading(false);
         }
