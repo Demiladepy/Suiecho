@@ -2,7 +2,7 @@
 
 **Suiecho** is a decentralized educational accessibility platform built on the Sui blockchain. It bridges the gap for visually impaired students by converting physical and digital study materials into verified, accessible audio formats.
 
-By leveraging Sui’s unique object-centric architecture, Suiecho ensures that educational content is not only accessible but also verifiable, rewarding, and easy to use for everyone—from students to lecturers.
+By leveraging Sui’s unique object-centric architecture, Suiecho ensures that educational content is not only accessible but also verifiable, rewarding, and easy to use for everyone from students to lecturers.
 
 # Architecture Overview
 **Suiecho** integrates cutting-edge web3 primitives to create a seamless "web2-like" experience for a mission-driven use case.
